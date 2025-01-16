@@ -23,9 +23,11 @@ COPY tsconfig.json ./
 COPY ./src ./src
 COPY ./characters ./characters
 
-# Install dependencies and build the project
+# Install dependencies, install Playwright browsers, and build the project
 RUN pnpm i
-RUN pnpm build 
+RUN pnpm exec playwright install --with-deps
+RUN pnpm build
+
 # Create a new stage for the final image
 FROM node:23.3.0-slim
 
