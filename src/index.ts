@@ -155,7 +155,6 @@ function initializeDatabase(dataDir: string) {
   } else {
     const filePath =
       process.env.SQLITE_FILE ?? path.resolve(dataDir, "db.sqlite");
-    // ":memory:";
     const db = new SqliteDatabaseAdapter(new Database(filePath));
     return db;
   }
@@ -168,33 +167,38 @@ export async function initializeClients(
   const clients = [];
   const clientTypes = character.clients?.map((str) => str.toLowerCase()) || [];
 
-  if (clientTypes.includes("auto")) {
-    const autoClient = await AutoClientInterface.start(runtime);
-    if (autoClient) clients.push(autoClient);
-  }
+  try {
+    if (clientTypes.includes("auto")) {
+      const autoClient = await AutoClientInterface.start(runtime);
+      if (autoClient) clients.push(autoClient);
+    }
 
-  if (clientTypes.includes("discord")) {
-    clients.push(await DiscordClientInterface.start(runtime));
-  }
+    if (clientTypes.includes("discord")) {
+      clients.push(await DiscordClientInterface.start(runtime));
+    }
 
-  if (clientTypes.includes("telegram")) {
-    const telegramClient = await TelegramClientInterface.start(runtime);
-    if (telegramClient) clients.push(telegramClient);
-  }
+    if (clientTypes.includes("telegram")) {
+      const telegramClient = await TelegramClientInterface.start(runtime);
+      if (telegramClient) clients.push(telegramClient);
+    }
 
-  if (clientTypes.includes("twitter")) {
-    const twitterClients = await TwitterClientInterface.start(runtime);
-    clients.push(twitterClients);
-  }
+    if (clientTypes.includes("twitter")) {
+      const twitterClients = await TwitterClientInterface.start(runtime);
+      clients.push(twitterClients);
+    }
 
-  if (character.plugins?.length > 0) {
-    for (const plugin of character.plugins) {
-      if (plugin.clients) {
-        for (const client of plugin.clients) {
-          clients.push(await client.start(runtime));
+    if (character.plugins?.length > 0) {
+      for (const plugin of character.plugins) {
+        if (plugin.clients) {
+          for (const client of plugin.clients) {
+            clients.push(await client.start(runtime));
+          }
         }
       }
     }
+  } catch (error) {
+    console.error("Error initializing clients:", error);
+    throw error;
   }
 
   return clients;
@@ -255,8 +259,7 @@ async function startAgent(character: Character, directClient: DirectClient) {
     }
 
     const db = initializeDatabase(dataDir);
-
-    await db.init();
+    await db.init(); // Asegúrate de que la base de datos esté inicializada
 
     const cache = intializeDbCache(character, db);
     const runtime = createAgent(character, db, cache, token);
@@ -301,9 +304,16 @@ const startAgents = async () => {
   function chat() {
     const agentId = characters[0].name ?? "Agent";
     rl.question("You: ", async (input) => {
-      await handleUserInput(input, agentId);
-      if (input.toLowerCase() !== "exit") {
-        chat(); // Loop back to ask another question
+      try {
+        await handleUserInput(input, agentId);
+        if (input.toLowerCase() !== "exit") {
+          chat(); // Loop back to ask another question
+        } else {
+          rl.close(); // Close only when the user types "exit"
+        }
+      } catch (error) {
+        console.error("Error handling user input:", error);
+        chat(); // Continue the loop even if there's an error
       }
     });
   }
@@ -349,6 +359,10 @@ async function handleUserInput(input, agentId) {
         }),
       }
     );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
     const data = await response.json();
     data.forEach((message) => console.log(`${"Agent"}: ${message.text}`));
