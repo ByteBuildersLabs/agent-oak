@@ -31,8 +31,7 @@ RUN pnpm build
 # Create a new stage for the final image
 FROM node:23.3.0-slim
 
-# Install runtime dependencies if needed
-RUN npm install -g pnpm@9.15.1
+# Install runtime dependencies for Playwright
 RUN apt-get update && \
     apt-get install -y git python3 && \
     apt-get clean && \
@@ -49,7 +48,9 @@ COPY --from=builder /app/dist /app/dist
 COPY --from=builder /app/tsconfig.json /app/
 COPY --from=builder /app/pnpm-lock.yaml /app/
 
+# Copy Playwright browsers and dependencies
+COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
+
 EXPOSE 3000
 # Set the command to run the application
 CMD ["pnpm", "start", "--non-interactive"]
-# CMD ["node", "dist/index.js"]
