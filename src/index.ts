@@ -37,6 +37,9 @@ import type { DirectClient } from "@ai16z/client-direct";
 const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
 const __dirname = path.dirname(__filename); // get the name of the directory
 
+// Logs adicionales para rastrear el flujo de ejecución
+console.log("Application started");
+
 export const wait = (minTime: number = 1000, maxTime: number = 3000) => {
   const waitTime =
     Math.floor(Math.random() * (maxTime - minTime + 1)) + minTime;
@@ -48,6 +51,7 @@ export function parseArguments(): {
   characters?: string;
 } {
   try {
+    console.log("Parsing arguments...");
     return yargs(process.argv.slice(2))
       .option("character", {
         type: "string",
@@ -67,6 +71,7 @@ export function parseArguments(): {
 export async function loadCharacters(
   charactersArg: string
 ): Promise<Character[]> {
+  console.log("Loading characters...");
   let characterPaths = charactersArg?.split(",").map((filePath) => {
     if (path.basename(filePath) === filePath) {
       filePath = "../characters/" + filePath;
@@ -79,6 +84,7 @@ export async function loadCharacters(
   if (characterPaths?.length > 0) {
     for (const path of characterPaths) {
       try {
+        console.log(`Loading character from ${path}...`);
         const character = JSON.parse(fs.readFileSync(path, "utf8"));
 
         validateCharacterConfig(character);
@@ -104,6 +110,7 @@ export function getTokenForProvider(
   provider: ModelProviderName,
   character: Character
 ) {
+  console.log(`Getting token for provider: ${provider}`);
   switch (provider) {
     case ModelProviderName.OPENAI:
       return (
@@ -147,6 +154,7 @@ export function getTokenForProvider(
 }
 
 function initializeDatabase(dataDir: string) {
+  console.log("Initializing database...");
   if (process.env.POSTGRES_URL) {
     const db = new PostgresDatabaseAdapter({
       connectionString: process.env.POSTGRES_URL,
@@ -164,30 +172,36 @@ export async function initializeClients(
   character: Character,
   runtime: IAgentRuntime
 ) {
+  console.log("Initializing clients...");
   const clients = [];
   const clientTypes = character.clients?.map((str) => str.toLowerCase()) || [];
 
   try {
     if (clientTypes.includes("auto")) {
+      console.log("Starting AutoClient...");
       const autoClient = await AutoClientInterface.start(runtime);
       if (autoClient) clients.push(autoClient);
     }
 
     if (clientTypes.includes("discord")) {
+      console.log("Starting DiscordClient...");
       clients.push(await DiscordClientInterface.start(runtime));
     }
 
     if (clientTypes.includes("telegram")) {
+      console.log("Starting TelegramClient...");
       const telegramClient = await TelegramClientInterface.start(runtime);
       if (telegramClient) clients.push(telegramClient);
     }
 
     if (clientTypes.includes("twitter")) {
+      console.log("Starting TwitterClient...");
       const twitterClients = await TwitterClientInterface.start(runtime);
       clients.push(twitterClients);
     }
 
     if (character.plugins?.length > 0) {
+      console.log("Initializing plugin clients...");
       for (const plugin of character.plugins) {
         if (plugin.clients) {
           for (const client of plugin.clients) {
@@ -210,6 +224,7 @@ export function createAgent(
   cache: ICacheManager,
   token: string
 ) {
+  console.log(`Creating agent for character: ${character.name}`);
   elizaLogger.success(
     elizaLogger.successesTitle,
     "Creating runtime for character",
@@ -235,6 +250,7 @@ export function createAgent(
 }
 
 function intializeFsCache(baseDir: string, character: Character) {
+  console.log("Initializing filesystem cache...");
   const cacheDir = path.resolve(baseDir, character.id, "cache");
 
   const cache = new CacheManager(new FsCacheAdapter(cacheDir));
@@ -242,12 +258,14 @@ function intializeFsCache(baseDir: string, character: Character) {
 }
 
 function intializeDbCache(character: Character, db: IDatabaseCacheAdapter) {
+  console.log("Initializing database cache...");
   const cache = new CacheManager(new DbCacheAdapter(db, character.id));
   return cache;
 }
 
 async function startAgent(character: Character, directClient: DirectClient) {
   try {
+    console.log(`Starting agent for character: ${character.name}`);
     character.id ??= stringToUuid(character.name);
     character.username ??= character.name;
 
@@ -255,6 +273,7 @@ async function startAgent(character: Character, directClient: DirectClient) {
     const dataDir = path.join(__dirname, "../data");
 
     if (!fs.existsSync(dataDir)) {
+      console.log("Creating data directory...");
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
@@ -282,6 +301,7 @@ async function startAgent(character: Character, directClient: DirectClient) {
 }
 
 const startAgents = async () => {
+  console.log("Starting agents...");
   const directClient = await DirectClientInterface.start();
   const args = parseArguments();
 
@@ -305,10 +325,12 @@ const startAgents = async () => {
     const agentId = characters[0].name ?? "Agent";
     rl.question("You: ", async (input) => {
       try {
+        console.log(`Handling user input: ${input}`);
         await handleUserInput(input, agentId);
         if (input.toLowerCase() !== "exit") {
           chat(); // Loop back to ask another question
         } else {
+          console.log("Closing readline interface...");
           rl.close(); // Close only when the user types "exit"
         }
       } catch (error) {
@@ -333,18 +355,21 @@ const rl = readline.createInterface({
 });
 
 rl.on("SIGINT", () => {
+  console.log("Received SIGINT. Closing readline interface...");
   rl.close();
   process.exit(0);
 });
 
 async function handleUserInput(input, agentId) {
   if (input.toLowerCase() === "exit") {
+    console.log("Exiting application...");
     rl.close();
     process.exit(0);
     return;
   }
 
   try {
+    console.log(`Sending user input to agent ${agentId}...`);
     const serverPort = parseInt(settings.SERVER_PORT || "3000");
 
     const response = await fetch(
